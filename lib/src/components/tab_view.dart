@@ -35,6 +35,7 @@ class TenorTabView extends StatefulWidget {
   final Function(TenorResult? gif)? onSelected;
   final bool showCategories;
   final TenorTabViewStyle style;
+  final int? columnCount;
 
   const TenorTabView({
     required this.client,
@@ -47,6 +48,7 @@ class TenorTabView extends StatefulWidget {
     this.onSelected,
     this.showCategories = false,
     this.style = const TenorTabViewStyle(),
+    this.columnCount,
     super.key,
   }) : featuredCategory = featuredCategory ?? '📈 Featured';
 
@@ -76,11 +78,8 @@ class _TenorTabViewState extends State<TenorTabView>
   // Direction
   final Axis _scrollDirection = Axis.vertical;
 
-  // Axis count
-  late int _crossAxisCount;
-
   // Limit of query
-  late int _limit;
+  final int _limit = 30;
 
   // is Loading gifs
   bool _isLoading = false;
@@ -109,7 +108,7 @@ class _TenorTabViewState extends State<TenorTabView>
     client = widget.client;
 
     WidgetsBinding.instance.addPostFrameCallback((timeStamp) {
-      getCount();
+      // getCount();
       // load categories
       if (widget.showCategories) {
         _loadCatagories();
@@ -131,26 +130,24 @@ class _TenorTabViewState extends State<TenorTabView>
     // Listen query
     _appBarProvider.addListener(_listenerQuery);
 
-    getCount();
+    //getCount();
 
     // Initial offset
     offset = null;
   }
 
-  void getCount() {
+  int getColumnCount(double maxWidth) {
     // Set items count responsive
-    _crossAxisCount =
-        (MediaQuery.of(context).size.width / widget.mediaWidth).round();
+    return (maxWidth / widget.mediaWidth).round();
 
     // Set vertical max items count
-    int mainAxisCount =
-        ((MediaQuery.of(context).size.height - 30) / widget.mediaWidth).round();
+    // int mainAxisCount = ((maxHeight - 30) / widget.mediaWidth).round();
 
-    // Calculate the visible limit
-    _limit = _crossAxisCount * mainAxisCount;
+    // // Calculate the visible limit
+    // _limit = _crossAxisCount * mainAxisCount;
 
-    // Tenor has a hard limit of 50
-    if (_limit > 50) _limit = 50;
+    // // Tenor has a hard limit of 50
+    // if (_limit > 50) _limit = 50;
   }
 
   @override
@@ -163,87 +160,93 @@ class _TenorTabViewState extends State<TenorTabView>
   @override
   Widget build(BuildContext context) {
     super.build(context);
-    if (_list.isEmpty && _categories.isEmpty) {
-      return const Center(
-        child: CircularProgressIndicator(),
-      );
-    }
+    return LayoutBuilder(
+        builder: (BuildContext context, BoxConstraints constraints) {
+      double maxWidth = constraints.maxWidth;
+      int columnCount = widget.columnCount ?? getColumnCount(maxWidth);
+      if (_list.isEmpty && _categories.isEmpty) {
+        return const Center(
+          child: CircularProgressIndicator(),
+        );
+      }
 
-    if (_appBarProvider.queryText.isEmpty &&
-        _appBarProvider.selectedCategory == null &&
-        widget.showCategories) {
+      if (_appBarProvider.queryText.isEmpty &&
+          _appBarProvider.selectedCategory == null &&
+          widget.showCategories) {
+        return Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8.0),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(8),
+            child: MasonryGridView.count(
+              shrinkWrap: true,
+              controller: scrollController,
+              crossAxisCount: columnCount,
+              crossAxisSpacing: 8,
+              keyboardDismissBehavior: _appBarProvider.keyboardDismissBehavior,
+              itemBuilder: (ctx, idx) {
+                final category = _categories[idx];
+                return ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
+                  child: TenorCategoryWidget(
+                    style: widget.categoryStyle,
+                    category: category,
+                    onTap: (selectedCategory) {
+                      // if it's a normal category, search it up
+                      if (selectedCategory.path.startsWith('##') == false) {
+                        _appBarProvider.queryText = selectedCategory.searchTerm;
+                      }
+                      // otherwise just set it so we can make a custom view
+                      _appBarProvider.selectedCategory = selectedCategory;
+                    },
+                  ),
+                );
+              },
+              itemCount: _categories.length,
+              mainAxisSpacing: 8,
+              // Add safe area padding if `TenorAttributionType.poweredBy` is disabled
+              padding:
+                  _tabProvider.attributionType == TenorAttributionType.poweredBy
+                      ? null
+                      : EdgeInsets.only(
+                          bottom: MediaQuery.of(context).padding.bottom,
+                        ),
+              scrollDirection: _scrollDirection,
+            ),
+          ),
+        );
+      }
+
       return Padding(
         padding: const EdgeInsets.symmetric(horizontal: 8.0),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(8),
-          child: MasonryGridView.count(
-            shrinkWrap: true,
-            controller: scrollController,
-            crossAxisCount: _crossAxisCount,
-            crossAxisSpacing: 8,
-            keyboardDismissBehavior: _appBarProvider.keyboardDismissBehavior,
-            itemBuilder: (ctx, idx) {
-              final category = _categories[idx];
-              return ClipRRect(
-                borderRadius: BorderRadius.circular(8),
-                child: TenorCategoryWidget(
-                  style: widget.categoryStyle,
-                  category: category,
-                  onTap: (selectedCategory) {
-                    // if it's a normal category, search it up
-                    if (selectedCategory.path.startsWith('##') == false) {
-                      _appBarProvider.queryText = selectedCategory.searchTerm;
-                    }
-                    // otherwise just set it so we can make a custom view
-                    _appBarProvider.selectedCategory = selectedCategory;
-                  },
-                ),
-              );
-            },
-            itemCount: _categories.length,
-            mainAxisSpacing: 8,
-            // Add safe area padding if `TenorAttributionType.poweredBy` is disabled
-            padding:
-                _tabProvider.attributionType == TenorAttributionType.poweredBy
-                    ? null
-                    : EdgeInsets.only(
-                        bottom: MediaQuery.of(context).padding.bottom,
-                      ),
-            scrollDirection: _scrollDirection,
+        child: MasonryGridView.count(
+          controller: scrollController,
+          shrinkWrap: true,
+          crossAxisCount: columnCount,
+          crossAxisSpacing: 8,
+          keyboardDismissBehavior: _appBarProvider.keyboardDismissBehavior,
+          itemBuilder: (ctx, idx) => ClipRRect(
+            borderRadius: BorderRadius.circular(8),
+            child: TenorSelectableGif(
+              backgroundColor: widget.style.mediaBackgroundColor,
+              onTap: (selectedResult) => _selectedGif(
+                selectedResult,
+              ),
+              result: _list[idx],
+            ),
           ),
+          itemCount: _list.length,
+          mainAxisSpacing: 8,
+          // Add safe area padding if `TenorAttributionType.poweredBy` is disabled
+          padding:
+              _tabProvider.attributionType == TenorAttributionType.poweredBy
+                  ? null
+                  : EdgeInsets.only(
+                      bottom: MediaQuery.of(context).padding.bottom,
+                    ),
+          scrollDirection: _scrollDirection,
         ),
       );
-    }
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 8.0),
-      child: MasonryGridView.count(
-        controller: scrollController,
-        shrinkWrap: true,
-        crossAxisCount: _crossAxisCount,
-        crossAxisSpacing: 8,
-        keyboardDismissBehavior: _appBarProvider.keyboardDismissBehavior,
-        itemBuilder: (ctx, idx) => ClipRRect(
-          borderRadius: BorderRadius.circular(8),
-          child: TenorSelectableGif(
-            backgroundColor: widget.style.mediaBackgroundColor,
-            onTap: (selectedResult) => _selectedGif(
-              selectedResult,
-            ),
-            result: _list[idx],
-          ),
-        ),
-        itemCount: _list.length,
-        mainAxisSpacing: 8,
-        // Add safe area padding if `TenorAttributionType.poweredBy` is disabled
-        padding: _tabProvider.attributionType == TenorAttributionType.poweredBy
-            ? null
-            : EdgeInsets.only(
-                bottom: MediaQuery.of(context).padding.bottom,
-              ),
-        scrollDirection: _scrollDirection,
-      ),
-    );
+    });
   }
 
   Future<void> _loadCatagories() async {
