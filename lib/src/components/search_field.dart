@@ -87,6 +87,7 @@ class _TenorSearchFieldState extends State<TenorSearchField> {
   late TenorSheetProvider _sheetProvider;
   late TextEditingController _textEditingController;
   final FocusNode _focus = FocusNode();
+  bool _isUpdatingFromProvider = false;
 
   @override
   void initState() {
@@ -113,11 +114,14 @@ class _TenorSearchFieldState extends State<TenorSearchField> {
 
       // Listener TextField
       _textEditingController.addListener(() {
-        debouncer.call(() {
-          if (_appBarProvider.queryText != _textEditingController.text) {
-            _appBarProvider.queryText = _textEditingController.text;
-          }
-        });
+        // Chỉ cập nhật provider khi không phải đang cập nhật từ provider
+        if (!_isUpdatingFromProvider) {
+          debouncer.call(() {
+            if (_appBarProvider.queryText != _textEditingController.text) {
+              _appBarProvider.queryText = _textEditingController.text;
+            }
+          });
+        }
       });
     });
     super.initState();
@@ -249,6 +253,33 @@ class _TenorSearchFieldState extends State<TenorSearchField> {
 
   // listener query
   void _listenerQuery() {
-    _textEditingController.text = _appBarProvider.queryText;
+    // Chỉ cập nhật TextField khi text thực sự khác nhau
+    if (_textEditingController.text != _appBarProvider.queryText) {
+      _isUpdatingFromProvider = true;
+
+      // Lưu vị trí cursor hiện tại
+      final currentSelection = _textEditingController.selection;
+      final currentText = _textEditingController.text;
+
+      // Cập nhật text
+      _textEditingController.text = _appBarProvider.queryText;
+
+      // Khôi phục vị trí cursor nếu có thể
+      if (_appBarProvider.queryText.isNotEmpty &&
+          currentText.isNotEmpty &&
+          _appBarProvider.queryText.startsWith(currentText)) {
+        // Nếu text mới bắt đầu bằng text cũ, giữ nguyên vị trí cursor
+        _textEditingController.selection = TextSelection.collapsed(
+          offset: currentSelection.baseOffset,
+        );
+      } else {
+        // Nếu không, đặt cursor ở cuối text
+        _textEditingController.selection = TextSelection.collapsed(
+          offset: _appBarProvider.queryText.length,
+        );
+      }
+
+      _isUpdatingFromProvider = false;
+    }
   }
 }
