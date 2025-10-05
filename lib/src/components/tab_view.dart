@@ -363,6 +363,9 @@ class _TenorTabViewState extends State<TenorTabView>
 
   // listener query
   void _listenerQuery() {
+    if (_appBarProvider.queryText.isEmpty) {
+      return;
+    }
     // Reset pagination
     _collection = null;
 
